@@ -1,0 +1,4 @@
+# secretos y datos de runtime — nunca al repo
+.env
+var/
+*.log
