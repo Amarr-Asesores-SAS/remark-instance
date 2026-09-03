@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Infrastructure-only backend for a self-hosted [Remark42](https://remark42.com) comments
 instance serving **estrellaswebcam.com**. Runs on a Hetzner VPS behind the host nginx.
-There is no application code, no build, no test suite, no linter — the repo is a
-`compose.yaml`, an `.env` template, and one nginx vhost. The frontend (Astro rewrite +
-widget) lives in a separate repo (the website repo).
+No build, no test suite, no linter — the repo is a `compose.yaml`, an `.env` template,
+one nginx vhost, and one static moderation panel (`admin/index.html`, vanilla JS, no
+build). The frontend (Astro rewrite + widget) lives in a separate repo (the website repo).
 
 `README.md` is the authoritative runbook (written in Spanish) and covers full VPS
 deployment, backups, and moderation. Read it before making infra changes.
@@ -45,9 +45,13 @@ curl -s "http://127.0.0.1:9081/api/v1/config?site=ewcam" | head -c 200
 curl -s "https://comments.ewcam.co/api/v1/config?site=ewcam" | head -c 200
 ```
 
-Moderation has no web GUI. It is done over the API with HTTP basic auth
-(`admin` + `ADMIN_PASSWD`); see the "Moderacion" section of `README.md` for the
-delete / pin / readonly / block-user calls.
+Moderation runs over the API with HTTP basic auth (`admin` + `ADMIN_PASSWD`); see
+the "Moderacion" section of `README.md` for the delete / pin / readonly /
+block-user calls. There is also a static web panel at `comments.ewcam.co/admin/`
+(`admin/index.html`) — nginx `auth_basic` gates both `/admin/` and
+`^~ /api/v1/admin/` against `/etc/nginx/remark-admin.htpasswd`, which must hold
+`admin:<ADMIN_PASSWD>` so nginx can forward the same credential to Remark42. See
+the "Panel de moderación" section of `README.md`.
 
 ## Configuration notes that bite
 

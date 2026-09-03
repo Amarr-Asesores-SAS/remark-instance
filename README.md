@@ -189,8 +189,69 @@ curl $A -X PUT "$BASE/api/v1/admin/user/{userId}?site=ewcam&block=1&ttl=0"
 curl $A "$BASE/api/v1/admin/blocked?site=ewcam"
 ```
 
-Si mas adelante se quiere clic-para-borrar, se añade una pagina `admin.html`
-detras de `auth_basic` en el vhost, o una ruta protegida en el sitio Astro.
+Para clic-para-borrar hay un panel web: ver abajo.
+
+---
+
+## Panel de moderación (`/admin`)
+
+Panel estático interno servido por el nginx del host en
+`https://comments.ewcam.co/admin/`. Sin build, sin contenedor nuevo: es un solo
+`admin/index.html` (JS vanilla) en este repo.
+
+Qué hace:
+
+- Escribes el `site` y trae los últimos N comentarios (`/api/v1/last/{max}`, sin auth).
+- Botón **Cargar todo** → `GET /api/v1/admin/export?site=…&mode=stream` (con auth): baja
+  el dump completo y lo pinta en la tabla.
+- Por fila: borrar, pin/unpin, poner el hilo en solo-lectura (on/off), bloquear /
+  desbloquear al autor (bloqueo permanente, `ttl=0`).
+- Botón **Ver bloqueados** → `GET /api/v1/admin/blocked` con desbloqueo inline.
+- Filtro por texto/autor y "ocultar borrados", en cliente.
+
+### Auth (dos capas, una sola contraseña)
+
+1. `nginx` protege `location /admin/` **y** `location ^~ /api/v1/admin/` con
+   `auth_basic` contra `/etc/nginx/remark-admin.htpasswd`.
+2. `nginx` reenvía el header `Authorization` a Remark42, que lo revalida contra
+   `admin` + `ADMIN_PASSWD`.
+
+Por eso el htpasswd **debe** ser `admin:<ADMIN_PASSWD del .env>`. Así el navegador
+pide la contraseña una vez y la misma credencial vale para las llamadas de
+moderación. (El panel además pide la contraseña por su cuenta si recibe un `401`,
+como respaldo.)
+
+### Deploy
+
+```bash
+# 1. htpasswd con la MISMA credencial que ADMIN_PASSWD
+sudo apt install -y apache2-utils
+source /opt/remark-instance/.env
+sudo htpasswd -bc /etc/nginx/remark-admin.htpasswd admin "$ADMIN_PASSWD"
+
+# 2. locations del vhost (ya en deploy/comments.ewcam.co.nginx.conf)
+sudo cp /opt/remark-instance/deploy/comments.ewcam.co.nginx.conf \
+        /etc/nginx/sites-available/comments.ewcam.co
+#   si certbot ya metió el bloque 443: copia también ahí las 3 location,
+#   o re-ejecuta:  sudo certbot --nginx -d comments.ewcam.co
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+`root /opt/remark-instance;` en el vhost asume que el repo está clonado ahí. Si
+vive en otra ruta, ajústalo. El usuario de nginx necesita lectura sobre
+`…/remark-instance/admin/`.
+
+Actualizar el panel = `git pull` en el VPS (archivo estático, sin reinicio).
+
+### Smoke test
+
+```bash
+source .env
+# 401 sin credencial
+curl -s -o /dev/null -w '%{http_code}\n' https://comments.ewcam.co/admin/
+# 200 con credencial
+curl -s -o /dev/null -w '%{http_code}\n' -u admin:$ADMIN_PASSWD https://comments.ewcam.co/admin/
+```
 
 ---
 
