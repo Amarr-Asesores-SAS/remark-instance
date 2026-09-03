@@ -40,9 +40,9 @@ docker compose logs -f remark42      # follow logs
 docker compose pull && docker compose up -d   # upgrade after bumping the image tag in compose.yaml
 
 # local smoke test (no nginx/TLS) — expect JSON with "auth_providers":["anonymous"]
-curl -s "http://127.0.0.1:9081/api/v1/config?site=ewcam" | head -c 200
+curl -s "http://127.0.0.1:9081/api/v1/config?site=estrellaswebcam" | head -c 200
 # public smoke test
-curl -s "https://comments.ewcam.co/api/v1/config?site=ewcam" | head -c 200
+curl -s "https://comments.ewcam.co/api/v1/config?site=estrellaswebcam" | head -c 200
 ```
 
 Moderation runs over the API with HTTP basic auth (`admin` + `ADMIN_PASSWD`); see
@@ -52,6 +52,25 @@ block-user calls. There is also a static web panel at `comments.ewcam.co/admin/`
 `^~ /api/v1/admin/` against `/etc/nginx/remark-admin.htpasswd`, which must hold
 `admin:<ADMIN_PASSWD>` so nginx can forward the same credential to Remark42. See
 the "Panel de moderación" section of `README.md`.
+
+## Versioning & deploy
+
+Two independent version axes:
+
+- **This repo** (infra + panel): git tags `vX.Y.Z`, matching the `VERSION` file.
+  `CHANGELOG.md` is keepachangelog. The VPS runs a **detached checkout of a
+  tag**, never a branch — deploy and rollback are both
+  `./scripts/deploy.sh [vX.Y.Z]` (fetch, checkout, regen `admin/version.json`,
+  `docker compose up -d` only if `compose.yaml` changed, `nginx -t` + reload,
+  smoke tests against the public domain).
+- **Remark42 backend**: the image tag in `compose.yaml` (`v1.16.4`), bumped by hand.
+
+`admin/version.json` is gitignored — `deploy.sh` generates it on the VPS from
+`git describe`; the panel header displays it.
+
+Release flow: bump `VERSION` + move `CHANGELOG.md` `[Unreleased]` → `[x.y.z]`,
+commit `🔖 chore: release vX.Y.Z`, `git tag -a vX.Y.Z`, push `--follow-tags`,
+then `./scripts/deploy.sh vX.Y.Z` on the VPS.
 
 ## Configuration notes that bite
 
@@ -67,7 +86,7 @@ the "Panel de moderación" section of `README.md`.
   rate-limiting and `VOTES_IP` ("1 vote per IP") apply to the docker gateway IP instead
   of the user's.
 - **Auth is anonymous-only** — no OAuth, no login screen. `POST /api/v1/comment`
-  requires `?site=ewcam` in the query and an `X-XSRF-TOKEN` header equal to the JWT
+  requires `?site=estrellaswebcam` in the query and an `X-XSRF-TOKEN` header equal to the JWT
   `jti` claim; the frontend widget handles this.
 - **Reply nesting depth is not enforced by the backend.** The "1 level" limit is a
   frontend decision (flattening the `format=tree` response).

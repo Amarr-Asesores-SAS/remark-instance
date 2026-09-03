@@ -3,3 +3,6 @@
 var/
 var.bak*/
 *.log
+
+# sello de versión que genera scripts/deploy.sh en el VPS
+admin/version.json

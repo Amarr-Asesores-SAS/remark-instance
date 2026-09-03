@@ -28,6 +28,7 @@
     border-bottom: 1px solid var(--border); padding: 10px 16px;
   }
   h1 { font-size: 15px; margin: 0 0 8px; }
+  h1 #ver { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .toolbar label { color: var(--muted); font-size: 12px; }
   input, button, select {
@@ -77,7 +78,7 @@
 </head>
 <body>
 <header>
-  <h1>Remark42 · Panel de moderación</h1>
+  <h1>Remark42 · Panel de moderación<span id="ver"></span></h1>
   <div class="toolbar">
     <label>site <input id="site" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     <label>máx <input id="max" type="number" min="1" max="5000" step="50"></label>
@@ -126,7 +127,7 @@
 
   // --- init inputs -----------------------------------------------------------
   const params = new URLSearchParams(location.search);
-  siteEl.value = params.get("site") || localStorage.getItem(LS_SITE) || "ewcam";
+  siteEl.value = params.get("site") || localStorage.getItem(LS_SITE) || "estrellaswebcam";
   maxEl.value = localStorage.getItem(LS_MAX) || "200";
   siteEl.addEventListener("change", () => localStorage.setItem(LS_SITE, siteEl.value.trim()));
   maxEl.addEventListener("change", () => localStorage.setItem(LS_MAX, maxEl.value));
@@ -466,6 +467,12 @@
   $("#loadLast").addEventListener("click", loadLast);
   $("#loadAll").addEventListener("click", loadAll);
   $("#viewBlocked").addEventListener("click", viewBlocked);
+
+  // version.json lo genera scripts/deploy.sh en el VPS; en dev no existe (404).
+  fetch("./version.json", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((v) => { if (v) $("#ver").textContent = v.version + (v.commit ? " (" + v.commit + ")" : ""); else $("#ver").textContent = "dev"; })
+    .catch(() => { $("#ver").textContent = "dev"; });
 
   loadLast();
 })();
