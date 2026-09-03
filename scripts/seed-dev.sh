@@ -52,7 +52,7 @@ docker inspect -f '{{.State.Running}}' "$CT" 2>/dev/null | grep -q true || {
 }
 
 SITE="${SITE:-$(docker inspect "$CT" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^SITE=//p')}"
-SITE="${SITE:-remark}"
+SITE="${SITE:-estrellaswebcam}"
 NET="$(docker inspect "$CT" --format '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}}{{end}}')"
 IMG="$(docker inspect "$CT" --format '{{.Config.Image}}')"
 TARGET="$CT:8080"
