@@ -237,23 +237,40 @@ sudo apt install -y apache2-utils
 set -a; . ./.env; set +a
 sudo htpasswd -bc /etc/nginx/remark-admin.htpasswd admin "$ADMIN_PASSWD"
 
-# 2. vhost con las 3 location del panel (= /admin, /admin/, ^~ /api/v1/admin/)
+# 2. vhost con las location del panel
 sudo cp deploy/comments.ewcam.co.nginx.conf \
         /etc/nginx/sites-available/comments.ewcam.co
+#    revisa la linea  alias /opt/remark-instance/admin/;  -> <clon>/admin/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-**Ojo con el bloque 443.** Si certbot ya editó el vhost in-place, el fichero
-vivo tiene un `server { listen 443 ssl; ... }` que **no** está en el repo.
-Copiar el fichero del repo encima deja las 3 `location` solo en el `:80`. Dos
-salidas:
+El fichero del repo ya refleja la estructura que dejó certbot (`listen 443 ssl`
+en el mismo `server` que `location /`, más un `server` aparte para el 301 de
+`:80`), así que `cp` es seguro. Si prefieres no reemplazarlo entero, pega estas
+`location` en el `server` vivo **antes de `location / {`**:
 
-- pegar a mano las 3 `location` también dentro del `server` de `:443`, **o**
-- `sudo certbot --nginx -d comments.ewcam.co` de nuevo → recrea el bloque 443
-  desde el `:80` (que ya trae las location).
+```nginx
+    location = /admin { return 301 /admin/; }
+    location /admin/ {
+        auth_basic           "remark admin";
+        auth_basic_user_file /etc/nginx/remark-admin.htpasswd;
+        alias /opt/remark-instance/admin/;      # <-- <clon>/admin/
+        index index.html;
+    }
+    location ^~ /api/v1/admin/ {
+        auth_basic           "remark admin";
+        auth_basic_user_file /etc/nginx/remark-admin.htpasswd;
+        proxy_pass http://127.0.0.1:9081;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 5s;
+    }
+```
 
-`root /opt/remark-instance;` en el vhost asume esa ruta de clon. Si vive en otra,
-ajústalo. El usuario de nginx necesita lectura sobre `…/remark-instance/admin/`.
+El usuario de nginx (`www-data`) necesita lectura sobre `<clon>/admin/`.
 
 ### Actualizar / hacer rollback
 
