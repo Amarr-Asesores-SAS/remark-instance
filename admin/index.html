@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Remark42 · Panel de moderación</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #d9dee5; --text: #1b1f24;
+    --muted: #6b7480; --accent: #2f6feb; --danger: #d1242f; --ok: #1a7f37;
+    --row-alt: #fafbfc; --chip: #eef1f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --border: #2a313a; --text: #e6e9ef;
+      --muted: #8b95a1; --accent: #4c8dff; --danger: #f85149;
+      --ok: #3fb950; --row-alt: #1b2027; --chip: #232a33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--panel);
+    border-bottom: 1px solid var(--border); padding: 10px 16px;
+  }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .toolbar label { color: var(--muted); font-size: 12px; }
+  input, button, select {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px;
+  }
+  input:focus, button:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input#site { width: 110px; }
+  input#max { width: 72px; }
+  input#q { flex: 1; min-width: 160px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .5; cursor: default; }
+  main { padding: 12px 16px 60px; }
+  #status { min-height: 20px; margin: 8px 0; color: var(--muted); font-size: 12px; white-space: pre-wrap; }
+  #status.err { color: var(--danger); }
+  #status.ok { color: var(--ok); }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 900px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { position: sticky; top: 0; background: var(--panel); font-size: 12px; color: var(--muted); }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tr.deleted td { opacity: .45; text-decoration: line-through; }
+  .txt { max-width: 420px; white-space: pre-wrap; word-break: break-word; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-right: 4px; }
+  .chip.pin { color: var(--accent); }
+  .url { font-size: 12px; color: var(--muted); word-break: break-all; max-width: 260px; display: inline-block; }
+  .actions { display: flex; flex-wrap: wrap; gap: 4px; }
+  .actions button { padding: 3px 7px; font-size: 12px; }
+  .actions button.del { color: var(--danger); border-color: var(--danger); }
+  td.first { white-space: nowrap; }
+  tr.dim td { opacity: .45; }
+  .cbtn { padding: 0 4px; margin-right: 5px; font-size: 11px; line-height: 1.4; }
+  .rmark { color: var(--muted); font-size: 12px; }
+  dialog {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+    color: var(--text); padding: 0; max-width: 520px; width: 92vw;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .dlg-body { padding: 16px; }
+  .dlg-body h2 { margin: 0 0 10px; font-size: 14px; }
+  .dlg-body ul { margin: 0; padding-left: 18px; max-height: 50vh; overflow: auto; }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Remark42 · Panel de moderación</h1>
+  <div class="toolbar">
+    <label>site <input id="site" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <label>máx <input id="max" type="number" min="1" max="5000" step="50"></label>
+    <button id="loadLast" class="primary">Cargar últimos</button>
+    <button id="loadAll" class="ghost">Cargar todo (export)</button>
+    <button id="viewBlocked" class="ghost">Ver bloqueados</button>
+    <button id="viewToggle" class="ghost">Vista: árbol</button>
+    <input id="q" placeholder="filtrar por texto o autor…">
+    <label><input type="checkbox" id="hideDeleted"> ocultar borrados</label>
+  </div>
+</header>
+
+<main>
+  <div id="status"></div>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Autor</th><th>Hilo</th><th>Comentario</th>
+          <th>Score</th><th>Estado</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+
+<dialog id="dlg"><div class="dlg-body" id="dlgBody"></div>
+  <div class="dlg-foot"><button id="dlgClose" class="ghost">Cerrar</button></div>
+</dialog>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const rowsEl = $("#rows"), statusEl = $("#status");
+  const siteEl = $("#site"), maxEl = $("#max"), qEl = $("#q"), hideDelEl = $("#hideDeleted");
+  const dlg = $("#dlg"), dlgBody = $("#dlgBody");
+
+  const LS_SITE = "remark_admin_site", LS_MAX = "remark_admin_max",
+        LS_VIEW = "remark_admin_view", SS_AUTH = "remark_admin_auth";
+  let data = [];                                   // comentarios cargados
+  let viewMode = localStorage.getItem(LS_VIEW) || "tree";   // "tree" | "flat"
+  const collapsed = new Set();                     // ids de subárboles plegados
+  let authHeader = sessionStorage.getItem(SS_AUTH) || "";
+
+  // --- init inputs -----------------------------------------------------------
+  const params = new URLSearchParams(location.search);
+  siteEl.value = params.get("site") || localStorage.getItem(LS_SITE) || "ewcam";
+  maxEl.value = localStorage.getItem(LS_MAX) || "200";
+  siteEl.addEventListener("change", () => localStorage.setItem(LS_SITE, siteEl.value.trim()));
+  maxEl.addEventListener("change", () => localStorage.setItem(LS_MAX, maxEl.value));
+  qEl.addEventListener("input", render);
+  hideDelEl.addEventListener("change", render);
+  $("#dlgClose").addEventListener("click", () => dlg.close());
+
+  const site = () => siteEl.value.trim();
+  function setStatus(msg, kind) { statusEl.textContent = msg; statusEl.className = kind || ""; }
+
+  // --- auth ----------------------------------------------------------------
+  function ensureAuth() {
+    if (authHeader) return true;
+    const pw = prompt("Contraseña de admin de Remark42 (ADMIN_PASSWD):");
+    if (!pw) return false;
+    authHeader = "Basic " + btoa("admin:" + pw);
+    sessionStorage.setItem(SS_AUTH, authHeader);
+    return true;
+  }
+  function clearAuth() { authHeader = ""; sessionStorage.removeItem(SS_AUTH); }
+
+  async function api(path, opts = {}, admin = false) {
+    const headers = Object.assign({}, opts.headers);
+    if (admin) {
+      if (!ensureAuth()) throw new Error("cancelado");
+      headers.Authorization = authHeader;
+    }
+    let res = await fetch(path, Object.assign({ credentials: "same-origin" }, opts, { headers }));
+    if (admin && res.status === 401) {
+      clearAuth();
+      if (!ensureAuth()) throw new Error("401 no autorizado");
+      headers.Authorization = authHeader;
+      res = await fetch(path, Object.assign({ credentials: "same-origin" }, opts, { headers }));
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(res.status + " " + res.statusText + (body ? " — " + body.slice(0, 300) : ""));
+    }
+    return res;
+  }
+
+  // --- loaders -----------------------------------------------------------
+  async function loadLast() {
+    if (!site()) return setStatus("indica un site", "err");
+    setBusy(true); setStatus("cargando últimos…");
+    try {
+      const n = Math.max(1, parseInt(maxEl.value, 10) || 200);
+      const res = await api(`/api/v1/last/${n}?site=${encodeURIComponent(site())}`);
+      data = normalize(await res.json());
+      setStatus(`${data.length} comentarios (últimos ${n})`, "ok");
+      render();
+    } catch (e) { setStatus("error: " + e.message, "err"); }
+    finally { setBusy(false); }
+  }
+
+  async function loadAll() {
+    if (!site()) return setStatus("indica un site", "err");
+    if (!confirm("Descargar el export completo del site. Puede tardar en sitios grandes. ¿Seguir?")) return;
+    setBusy(true); setStatus("descargando export…");
+    try {
+      const res = await api(`/api/v1/admin/export?site=${encodeURIComponent(site())}&mode=stream`, {}, true);
+      const text = await res.text();
+      const parsed = [];
+      for (const line of text.split("\n")) {
+        const s = line.trim();
+        if (!s) continue;
+        try { const o = JSON.parse(s); if (o && o.id && o.locator) parsed.push(o); } catch (_) {}
+      }
+      data = normalize(parsed);
+      setStatus(`${data.length} comentarios (export completo)`, "ok");
+      render();
+    } catch (e) { setStatus("error: " + e.message, "err"); }
+    finally { setBusy(false); }
+  }
+
+  function normalize(arr) {
+    if (!Array.isArray(arr)) arr = (arr && arr.comments) || [];
+    return arr
+      .filter((c) => c && c.id && c.locator)
+      .sort((a, b) => new Date(b.time) - new Date(a.time));
+  }
+
+  // --- render -----------------------------------------------------------
+  function hay(c) {
+    return ((c.orig || "") + " " + (c.text || "") + " " + (c.user?.name || "") + " " + (c.user?.id || "")).toLowerCase();
+  }
+
+  function render() {
+    const q = qEl.value.trim().toLowerCase();
+    const hideDel = hideDelEl.checked;
+
+    // indices padre/hijo
+    const byId = new Map();
+    for (const c of data) byId.set(c.id, c);
+    const kids = new Map();      // pid -> [comentarios]
+    const roots = [];
+    for (const c of data) {
+      const pid = c.pid && byId.has(c.pid) ? c.pid : "";
+      if (pid) { if (!kids.has(pid)) kids.set(pid, []); kids.get(pid).push(c); }
+      else roots.push(c);
+    }
+    const asc = (a, b) => new Date(a.time) - new Date(b.time);
+    const desc = (a, b) => new Date(b.time) - new Date(a.time);
+    roots.sort(desc);                                  // hilos: más nuevo arriba
+    for (const arr of kids.values()) arr.sort(asc);    // respuestas: cronológicas
+
+    // orden de filas + profundidad
+    const ignoreCollapse = !!q;
+    const order = [];
+    if (viewMode === "flat") {
+      for (const c of [...data].sort(desc)) {
+        order.push({ c, depth: 0, childCount: (kids.get(c.id) || []).length, parentName: byId.get(c.pid)?.user?.name || "" });
+      }
+    } else {
+      const walk = (c, depth) => {
+        const ch = kids.get(c.id) || [];
+        order.push({ c, depth, childCount: ch.length, parentName: byId.get(c.pid)?.user?.name || "" });
+        if (!ignoreCollapse && collapsed.has(c.id)) return;
+        for (const k of ch) walk(k, depth + 1);
+      };
+      for (const r of roots) walk(r, 0);
+    }
+
+    // filtro tree-aware: conserva subárbol y ancestros de cada match
+    let rows = order, match = null;
+    if (q) {
+      match = new Set();
+      for (const r of order) if (hay(r.c).includes(q)) match.add(r.c.id);
+      const keep = new Set(match);
+      for (const id of match) {
+        let cur = byId.get(id);
+        while (cur && cur.pid && byId.has(cur.pid)) { keep.add(cur.pid); cur = byId.get(cur.pid); }
+      }
+      const stack = [...match];
+      while (stack.length) {
+        const id = stack.pop();
+        for (const k of (kids.get(id) || [])) if (!keep.has(k.id)) { keep.add(k.id); stack.push(k.id); }
+      }
+      rows = order.filter((r) => keep.has(r.c.id));
+    }
+
+    // ocultar borrados (conserva el padre borrado si tiene descendiente vivo)
+    if (hideDel) {
+      const vis = new Set(rows.map((r) => r.c.id));
+      const hasLiveKid = (id) => {
+        for (const k of (kids.get(id) || [])) {
+          if (vis.has(k.id) && !k.delete) return true;
+          if (hasLiveKid(k.id)) return true;
+        }
+        return false;
+      };
+      rows = rows.filter((r) => !r.c.delete || hasLiveKid(r.c.id));
+    }
+
+    rowsEl.textContent = "";
+    for (const r of rows) {
+      r.dim = match ? !match.has(r.c.id) : false;
+      rowsEl.appendChild(rowEl(r));
+    }
+    if (!rows.length) rowsEl.appendChild(el("tr", {}, [el("td", { colSpan: 7, class: "meta" }, ["sin resultados"])]));
+    if (q) setStatus(`${rows.length} filas visibles · filtro "${q}"`);
+  }
+
+  function rowEl(ctx) {
+    const { c, depth, childCount, parentName, dim } = ctx;
+    const tr = el("tr", { "data-id": c.id, "data-url": c.locator.url, "data-depth": String(depth) });
+    let cls = "";
+    if (c.delete) cls += "deleted ";
+    if (dim) cls += "dim ";
+    if (cls) tr.className = cls.trim();
+
+    // fecha + indent + control de colapso
+    const first = el("td", { class: "meta first" });
+    first.style.paddingLeft = (8 + depth * 20) + "px";
+    if (depth > 0) first.style.borderLeft = "2px solid var(--accent)";
+    if (childCount > 0) {
+      first.appendChild(btn(collapsed.has(c.id) ? "[+]" : "[−]", "cbtn", () => {
+        if (collapsed.has(c.id)) collapsed.delete(c.id); else collapsed.add(c.id);
+        render();
+      }));
+    }
+    if (depth > 0) first.appendChild(el("span", { class: "rmark" }, ["↳ "]));
+    first.appendChild(document.createTextNode(fmtDate(c.time)));
+    tr.appendChild(first);
+
+    // autor
+    tr.appendChild(el("td", {}, [
+      el("div", {}, [c.user?.name || "?"]),
+      el("div", { class: "meta" }, [c.user?.id || ""]),
+      c.user?.admin ? el("span", { class: "chip" }, ["admin"]) : null,
+      parentName ? el("div", { class: "rmark" }, ["resp. a " + parentName]) : null,
+    ]));
+
+    // hilo
+    tr.appendChild(el("td", {}, [
+      el("div", {}, [c.title || c.locator.url]),
+      el("a", { class: "url", href: c.locator.url, target: "_blank", rel: "noopener" }, [c.locator.url]),
+    ]));
+
+    // texto
+    tr.appendChild(el("td", { class: "txt" }, [c.orig || stripTags(c.text) || ""]));
+
+    // score
+    tr.appendChild(el("td", { class: "meta" }, [String(c.score ?? 0)]));
+
+    // estado
+    const st = el("td", {});
+    if (c.pin) st.appendChild(el("span", { class: "chip pin" }, ["pin"]));
+    if (c.delete) st.appendChild(el("span", { class: "chip" }, ["borrado"]));
+    if (childCount > 0) st.appendChild(el("span", { class: "chip" }, [childCount + " resp."]));
+    tr.appendChild(st);
+
+    // acciones
+    tr.appendChild(el("td", {}, [el("div", { class: "actions" }, [
+      btn("Borrar", "del", () => act_delete(c)),
+      btn(c.pin ? "Unpin" : "Pin", "", () => act_pin(c, !c.pin)),
+      btn("Hilo RO on", "", () => act_readonly(c, true)),
+      btn("Hilo RO off", "", () => act_readonly(c, false)),
+      btn("Bloquear autor", "", () => act_block(c, true)),
+      btn("Desbloquear autor", "", () => act_block(c, false)),
+    ])]));
+    return tr;
+  }
+
+  // --- actions -----------------------------------------------------------
+  const qp = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+
+  async function act_delete(c) {
+    if (!confirm(`Borrar comentario de "${c.user?.name}"?\n\n${(c.orig || c.text || "").slice(0, 200)}`)) return;
+    await run(`borrado ${c.id}`, () => api(
+      `/api/v1/admin/comment/${encodeURIComponent(c.id)}?${qp({ site: site(), url: c.locator.url })}`,
+      { method: "DELETE" }, true), () => { c.delete = true; });
+  }
+  async function act_pin(c, pin) {
+    await run(`${pin ? "pin" : "unpin"} ${c.id}`, () => api(
+      `/api/v1/admin/pin/${encodeURIComponent(c.id)}?${qp({ site: site(), url: c.locator.url, pin: pin ? 1 : 0 })}`,
+      { method: "PUT" }, true), () => { c.pin = pin; });
+  }
+  async function act_readonly(c, ro) {
+    if (!confirm(`Poner el hilo en solo-lectura = ${ro ? "SÍ" : "NO"}?\n${c.locator.url}`)) return;
+    await run(`readonly ${ro ? "on" : "off"} — ${c.locator.url}`, () => api(
+      `/api/v1/admin/readonly?${qp({ site: site(), url: c.locator.url, ro: ro ? 1 : 0 })}`,
+      { method: "PUT" }, true));
+  }
+  async function act_block(c, block) {
+    const uid = c.user?.id;
+    if (!uid) return;
+    if (!confirm(`${block ? "Bloquear" : "Desbloquear"} a ${c.user?.name} (${uid})${block ? " de forma permanente" : ""}?`)) return;
+    const q = { site: site(), block: block ? 1 : 0 };
+    if (block) q.ttl = 0;
+    await run(`${block ? "bloqueado" : "desbloqueado"} ${uid}`, () => api(
+      `/api/v1/admin/user/${encodeURIComponent(uid)}?${qp(q)}`, { method: "PUT" }, true));
+  }
+
+  async function run(okMsg, fn, mutate) {
+    setBusy(true); setStatus("aplicando…");
+    try { await fn(); if (mutate) mutate(); setStatus("ok: " + okMsg, "ok"); render(); }
+    catch (e) { setStatus("error: " + e.message, "err"); }
+    finally { setBusy(false); }
+  }
+
+  async function viewBlocked() {
+    if (!site()) return setStatus("indica un site", "err");
+    setBusy(true); setStatus("cargando bloqueados…");
+    try {
+      const res = await api(`/api/v1/admin/blocked?site=${encodeURIComponent(site())}`, {}, true);
+      const list = await res.json();
+      dlgBody.textContent = "";
+      dlgBody.appendChild(el("h2", {}, [`Usuarios bloqueados (${(list || []).length})`]));
+      const ul = el("ul", {});
+      for (const u of list || []) {
+        const li = el("li", {}, [
+          `${u.name || "?"} — ${u.id} `,
+          u.time ? el("span", { class: "meta" }, [`(hasta ${fmtDate(u.time)})`]) : null,
+          " ",
+          btn("desbloquear", "", async () => {
+            await run(`desbloqueado ${u.id}`, () => api(
+              `/api/v1/admin/user/${encodeURIComponent(u.id)}?${qp({ site: site(), block: 0 })}`,
+              { method: "PUT" }, true));
+            li.remove();
+          }),
+        ]);
+        ul.appendChild(li);
+      }
+      dlgBody.appendChild(ul);
+      dlg.showModal();
+      setStatus("");
+    } catch (e) { setStatus("error: " + e.message, "err"); }
+    finally { setBusy(false); }
+  }
+
+  // --- helpers -----------------------------------------------------------
+  function setBusy(b) {
+    for (const el of document.querySelectorAll("header button")) el.disabled = b;
+  }
+  function el(tag, attrs, kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null) continue;
+      if (k === "class") n.className = v;
+      else if (k === "colSpan") n.colSpan = v;
+      else n.setAttribute(k, v);
+    }
+    for (const kid of kids || []) {
+      if (kid == null) continue;
+      n.appendChild(typeof kid === "string" ? document.createTextNode(kid) : kid);
+    }
+    return n;
+  }
+  function btn(label, cls, onClick) {
+    const b = el("button", { class: cls }, [label]);
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function stripTags(html) {
+    if (!html) return "";
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    return d.textContent || "";
+  }
+  function fmtDate(t) {
+    const d = new Date(t);
+    return isNaN(d) ? String(t || "") : d.toLocaleString();
+  }
+
+  // --- wire buttons ----------------------------------------------------
+  const viewToggleEl = $("#viewToggle");
+  const syncViewLabel = () => { viewToggleEl.textContent = viewMode === "tree" ? "Vista: árbol" : "Vista: plana"; };
+  viewToggleEl.addEventListener("click", () => {
+    viewMode = viewMode === "tree" ? "flat" : "tree";
+    localStorage.setItem(LS_VIEW, viewMode);
+    syncViewLabel();
+    render();
+  });
+  syncViewLabel();
+
+  $("#loadLast").addEventListener("click", loadLast);
+  $("#loadAll").addEventListener("click", loadAll);
+  $("#viewBlocked").addEventListener("click", viewBlocked);
+
+  loadLast();
+})();
+</script>
+</body>
+</html>
